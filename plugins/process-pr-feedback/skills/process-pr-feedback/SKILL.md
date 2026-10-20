@@ -1,6 +1,6 @@
 ---
 name: process-pr-feedback
-description: "[paranext-core ONLY] Use when a reviewer has left feedback on a paranext-core PR — review comments, a review round, reviewer findings, or a feedback document tied to a PR — and the round needs working end to end with the user ruling at two hard stops."
+description: "Use when a reviewer has left feedback on a PR in a paranext GitHub repo (paranext-core, the extension repos, any repo in the paranext org) — review comments, a review round, reviewer findings, or a feedback document tied to a PR — and the round needs working end to end with the user ruling at two hard stops."
 ---
 
 # Process PR feedback
@@ -10,7 +10,8 @@ description: "[paranext-core ONLY] Use when a reviewer has left feedback on a pa
 ```
 
 Pass every PR the round covers — one reviewer's round routinely spans a stack, and splitting it
-into one run per PR makes the user rule on half an argument twice.
+into one run per PR makes the user rule on half an argument twice. Run it from a checkout of the
+repo the PRs belong to; one run covers PRs in one repo.
 
 **Eleven steps. Two hard stops: 4 and 9** — unconditional; every other stop in this file is a
 condition that may not arise. Nothing is pushed or posted before 10. Approval is per-gate and
@@ -18,8 +19,9 @@ explicit — a general "keep going" crosses neither stop.
 
 ## Requirements
 
-- A paranext-core checkout, and the `gh` CLI signed in to an account that can push to the PR
-  branches and comment on the PRs. The flow posts under that account's name.
+- A checkout of a repo in the `paranext` GitHub org, with `origin` pointing at it, and the `gh`
+  CLI signed in to an account that can push to the PR branches and comment on the PRs. The flow
+  posts under that account's name.
 - **superpowers** plugin (`superpowers@claude-plugins-official`) for step 5's design → plan → TDD
   flow. Without it, do the same by hand: present a design and stop for approval, write a plan,
   then red-first tests.
@@ -30,16 +32,48 @@ explicit — a general "keep going" crosses neither stop.
   check the app's ports yourself (`lsof -i :8876 -i :1212 -i :9223 -i :9222`) and ask the user
   before anything that runs `npm stop`.
 
+## The repo
+
+Step 0 reads the repo from the checkout's `origin` remote, never from `gh`'s own choice of
+default, which can land on another remote — paranext-core checkouts often carry an
+extension-template remote as well:
+
+```bash
+git remote get-url origin | sed -E 's#^.*github\.com[:/]##; s#/$##; s#\.git$##'
+```
+
+The answer must be `paranext/<name>`, with no `.git` or slash after the name. Anything else — a
+fork as `origin`, another host — is a stop: put it to the user. Every `origin` in this file (the
+fetch, `origin/<branch>`, the push) means that remote, so it has to be the repo the PRs are in.
+Record the answer at the top of `findings.md` as `REPO` and use it wherever this file writes
+`<REPO>`. Add `--repo <REPO>` to every `gh pr …` command, including any shown below without it, for
+the same reason. Read it back from `findings.md` in a later session rather than trusting a shell
+variable, which does not survive between commands.
+
+**"In paranext-core" means `REPO` is `paranext/paranext-core`**; every other `REPO` is "another
+repo". Parts of steps 5, 7 and 10 name paranext-core's commands, files and standards. **In
+paranext-core, follow them exactly as written.** In another repo, keep the rule and use that repo's
+own equivalent, as each of those places says.
+
 ## Working notes
 
-Keep the round's notes in `.review/<pr>[-<pr>…]-<YYYY-MM-DD>/`, dated by the day the round
-started; a later session finds it with `ls -d .review/<pr>*`. `.review` is already ignored by git,
-prettier and eslint, so the notes stay out of the diff under review and out of step 7's format
-check. A second round the same day gets `-2`.
+Keep the round's notes in a directory named `<pr>[-<pr>…]-<YYYY-MM-DD>`, dated by the day the round
+started (a second round the same day gets `-2`), under a parent that keeps them out of the diff
+under review and out of step 7's format check. This file calls that directory `<notes>`:
+
+- **In paranext-core:** under `.review/`, which git, prettier and eslint already ignore. A later
+  session finds the round with `ls -d .review/<pr>*`.
+- **In another repo:** under `.review/` as well, which most of those repos do not ignore. Before
+  the first note, create `.review/.gitignore` containing the single line `*`: git then ignores the
+  folder and everything in it, with no change to any tracked file. Prettier does not read that
+  nested `.gitignore`, so step 7's format check excludes the folder itself. A later session finds
+  the round with `ls -d .review/<pr>*`. Keep notes out of `.git/` and `.claude/`: Claude Code
+  treats both as protected, so every write there waits for approval, which stalls an unattended
+  run.
 
 Six files, plus a pair per PR whose description the round changes, written as you go:
 
-- `findings.md` — steps 0–3, opening with step 0's branch table. Steps 5 and 10 update the
+- `findings.md` — steps 0–3, opening with `REPO` and step 0's branch table. Steps 5 and 10 update the
   table's `pin` column and nothing else in it; anything else they learn goes below the table.
 - `rulings.md` — the step 4 presentation as sent, followed by the user's answer **verbatim**, and
   the same for any question steps 5–7 put to the user. Appended, never overwritten: a ruling
@@ -73,6 +107,7 @@ else — no branch moves, no rebase, no push, no checkout. What it finds is a st
 for step 4, or a warning carried to step 4.
 
 ```bash
+git remote get-url origin          # REPO, per "The repo"
 git fetch origin
 git rev-parse --abbrev-ref HEAD     # which branch this checkout is on
 git status --porcelain              # tracked modifications
@@ -82,8 +117,9 @@ Then per branch, for **every branch in every stack the round touches — from th
 above `main` to the top**, whether or not it has feedback. A fix routinely lands below the PR that
 was commented on, and every branch we own above a changed one gets restacked and pushed, so each
 needs a row. Walk down from a PR's `baseRefName` with
-`gh pr list --head <baseRefName> --state all` until `main`, and up from its `headRefName` with
-`gh pr list --base <headRefName> --state all` until nothing answers — every PR, open or not,
+`gh pr list --repo <REPO> --head <baseRefName> --state all` until `main`, and up from its
+`headRefName` with `gh pr list --repo <REPO> --base <headRefName> --state all` until nothing
+answers — every PR, open or not,
 because a merged or closed one is where its branch's `baseRefName` and `author` still live. A
 branch with several PRs is read from the open one, else the most recently updated:
 `--json number,state,baseRefName,author,updatedAt --jq 'sort_by(.state == "OPEN", .updatedAt) | last'`
@@ -93,9 +129,9 @@ ours ends the stack there and is decision item one at step 4: our branch's real 
 whatever that PR merged into. A closed PR above ours is simply not in the stack:
 
 ```bash
-gh pr view <pr> --json \
+gh pr view <pr> --repo <REPO> --json \
   headRefName,baseRefName,headRefOid,state,mergeable,mergeStateStatus,reviewDecision,author
-gh api repos/paranext/paranext-core/compare/<baseRefName>...<headRefOid> --jq '{ahead_by,behind_by}'
+gh api repos/<REPO>/compare/<baseRefName>...<headRefOid> --jq '{ahead_by,behind_by}'
 git rev-list --left-right --count origin/<headRefName>...<headRefName>   # remote-only, local-only
 ```
 
@@ -158,18 +194,36 @@ Three traps:
 Per PR, all three surfaces:
 
 ```bash
-gh api repos/paranext/paranext-core/pulls/<pr>/reviews  --paginate   # review bodies
-gh api repos/paranext/paranext-core/pulls/<pr>/comments --paginate   # inline threads
-gh api repos/paranext/paranext-core/issues/<pr>/comments --paginate  # conversation comments
+gh api repos/<REPO>/pulls/<pr>/reviews  --paginate   # review bodies
+gh api repos/<REPO>/pulls/<pr>/comments --paginate   # inline threads
+gh api repos/<REPO>/issues/<pr>/comments --paginate  # conversation comments
 ```
 
 Then drop threads the reviewer already resolved — REST cannot see resolution state, so a second
-round re-collects everything round one answered. Copy the GraphQL query out of
-`.claude/commands/triage-feedback.md`; **read that file, never run it as a command** — its own later
-steps post and resolve with no gate in between. Widen it so each thread node carries `id`,
-`isResolved`, and `comments(first: 50) { nodes { databaseId author { login } } }`: the thread
-`id` is what closes a thread of ours at step 10, and the root author is how we tell
-ours from theirs — guessing that later resolves a reviewer's thread in public.
+round re-collects everything round one answered. GraphQL can see it (`<name>` is `REPO` without
+its `paranext/`):
+
+```bash
+gh api graphql --paginate --slurp -f query='
+query($owner: String!, $name: String!, $pr: Int!, $endCursor: String) {
+  repository(owner: $owner, name: $name) {
+    pullRequest(number: $pr) {
+      reviewThreads(first: 100, after: $endCursor) {
+        nodes { id isResolved isOutdated
+          comments(first: 50) { nodes { databaseId author { login } } } }
+        pageInfo { hasNextPage endCursor }
+      }
+    }
+  }
+}' -f owner=paranext -f name=<name> -F pr=<pr>
+```
+
+`--slurp` returns one array element per page; read the threads from every element. `gh` refuses
+`--slurp` together with `--jq`, so filter by piping the output to `jq`. The thread
+`id` is what closes a thread of ours at step 10, and the root author is how we tell ours from
+theirs — guessing that later resolves a reviewer's thread in public. (paranext-core's
+`.claude/commands/triage-feedback.md` carries a narrower form of this query; **never run that file
+as a command** — its own later steps post and resolve with no gate in between.)
 
 **An item is one of:** an inline thread — its root comment *and every reply in it*, the reviewer's
 follow-ups included; a review body; a conversation comment; a piece of off-PR feedback (see
@@ -209,7 +263,7 @@ reviews; only a finding that would change what this round does is a decision ite
 Read the code at the ref the reviewer read and decide what it actually does, rather than whether
 their story is plausible. That ref is usually one a force-push orphaned, so `git checkout` on it
 fails and the tempting fallback — reading the working tree — silently answers a different question:
-`gh api repos/paranext/paranext-core/contents/<path>?ref=<sha> --jq .content | base64 -d` reads any
+`gh api repos/<REPO>/contents/<path>?ref=<sha> --jq .content | base64 -d` reads any
 commit GitHub still holds. Where step 0 found local-only commits, check the item at the reviewer's
 ref *and* at the local tip: it may be fixed already, and the reply should say so.
 
@@ -358,10 +412,14 @@ that ruling — and equally after a ruling to overwrite them — the row's `pin`
 re-queried `headRefOid`, or step 10's lease can only fail.
 Red-first for every behaviour change. Never `--no-verify`. As each fix lands, append
 "item → commit → branch" below the table in `findings.md`; step 9 presents from that.
-New public API needs the `@experimental` marker on **both** surfaces — TSDoc on the type-visible
-one and `'x-experimental': true` in the
-registration's OpenRPC docs; the authoritative table is
-`.context/standards/Paranext-Core-Patterns.md` § Experimental APIs.
+In paranext-core and any repo that builds a Platform.Bible extension, new public API needs the `@experimental` marker on
+**both** surfaces — TSDoc on the type-visible one and `'x-experimental': true` in the
+registration's OpenRPC docs; the authoritative table is paranext-core's
+`.context/standards/Paranext-Core-Patterns.md` § Experimental APIs. From another repo, read it in
+the sibling `../paranext-core` checkout, or with
+`gh api repos/paranext/paranext-core/contents/.context/standards/Paranext-Core-Patterns.md --jq .content | base64 -d`.
+The rule covers anything that reaches the Platform.Bible API — `papi.d.ts`, an extension's `.d.ts`,
+or a registration on the network; a repo that adds none of these has nothing to mark.
 
 **Finish the stack before leaving this step.** Every branch we own that sits above a branch this
 round rewrote or added a commit to — anywhere in the stack, a rewrite or a plain commit, it makes
@@ -391,7 +449,7 @@ A restack that conflicts does so here, in front of you. The rule for the hunk: t
 win, and only the child's own insertion is the child's — resolving the other way reverts the
 base's change on the child's PR. In a rebase the `<<<<<<< HEAD` side *is* the base, and
 `git show REBASE_HEAD -- <file>` marks the child's own lines with `+`. Before touching anything,
-save the conflict: `git diff > .review/<dir>/conflict-<child>-<nn>.diff`. Then resolve, `git add`,
+save the conflict: `git diff > <notes>/conflict-<child>-<nn>.diff`. Then resolve, `git add`,
 `git rebase --continue`; never blanket `--continue || --skip` in a loop, since `--skip` silently
 drops real commits and an untracked-file collision or a hook failure looks exactly like an empty
 commit. Every saved conflict is shown at step 9, with its resolution, as content the user has not
@@ -465,7 +523,7 @@ these four and write the answers into `roborev.md`:
 - **Is it this round's business?** Code this round wrote or changed, within what the user ruled —
   or something pre-existing that the diff merely sits next to.
 - **Has it been raised before?** Read this PR's roborev history: earlier rounds' `roborev.md`
-  (`ls -d .review/<pr>*`) and the branch's closed jobs with the comments they were closed with
+  (found as **Working notes** says) and the branch's closed jobs with the comments they were closed with
   (commands below). The same finding or a cousin of it returning after a fix, or each fix drawing
   a fresh finding in the same area, means the fixes are wrong in kind. Stop patching, name the
   pattern in one plain sentence, and treat the pattern as the finding.
@@ -518,6 +576,40 @@ check in this flow — a diff that errored, a poll that read a network error as 
 concluded over an incomplete list. A check that cannot observe its subject reports success.
 
 ## 7. Verify it works
+
+**Every command and script this step names is paranext-core's, and in paranext-core this step is
+followed exactly as written.** In another repo, every rule here still holds — the
+three parts, the full run at the top tip, capped test runs, one at a time, a red test counting as
+pre-existing only once shown red on the base, evidence for every claim, and anything not run
+listed at gate 9 with the reason — but the commands are that repo's own:
+
+- **The battery** is what that repo's CI gates on. Read `.github/workflows/` and run the same lint,
+  typecheck, format and build steps locally — in the extension repos that is `npm run lint`,
+  `npm run format:check`, `npm run typecheck` where the script exists, and `npm run build`. A CI
+  check you cannot run locally is listed at gate 9 as not run. Run the format check with the notes
+  excluded — where it is `prettier --check .`, as `npm run format:check -- '!**/.review/**'` — and
+  read any warning that remains against `git status`: a file git does not track is local clutter
+  that CI's clean checkout never has, not the round's, and gate 9 lists it as such. The same goes
+  for any other linter in the battery that scans markdown or the whole tree.
+- **The test suites** are whatever that repo has and its CI runs, run whole and capped: vitest
+  with `--maxWorkers=4`, never bare. A repo with no tests is listed at gate 9 as having none.
+- **E2E** only where that repo has e2e specs; otherwise gate 9 says it has none.
+- **The live run** for an extension repo is the Platform.Bible dev app with the extension loaded:
+  the repo's `npm start` — check its `package.json` — watches the extension and runs
+  paranext-core's `npm start` from a sibling `../paranext-core` checkout. Everything below about the dev app applies to it unchanged — the
+  ports are the same, so `app-guard` comes first, and the repo's own `npm run stop` runs
+  paranext-core's `npm stop`, so it is treated exactly like `npm stop`. Neither `npm start` stops
+  anything first, so no `npm stop` shim is needed to start. The repo's `npm start` sets `MAIN_ARGS`
+  itself and leaves out CDP, so for a live run driven over CDP start the two halves yourself, the
+  way paranext-core's `refresh.sh` starts the app: `npm run watch` in the repo, in the background
+  and stopped by pid when the live run ends, then in
+  `../paranext-core`, `unset ELECTRON_RUN_AS_NODE` and
+  `xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" env MAIN_ARGS="<the argument the repo's start script passes, with its dist path made absolute> --remote-debugging-port=9223 --maximize" npm start`
+  — without `xvfb-run` where it is missing, which shows a window. The `visual-verification`,
+  `log-inspector` and `papi-client` skills live in paranext-core's `.claude/skills/`; from another
+  repo, read their `SKILL.md` there and follow it. For a repo that is not a Platform.Bible
+  extension, the live run is whatever its README or `CLAUDE.md` documents for running it locally;
+  where nothing does, gate 9 lists the live run as not run, with that reason.
 
 It has three parts — the battery, the test suites, the live run — and a green subset satisfies none
 of them. **They run in full once per round, at the top tip of each stack the round changed**: that
@@ -670,10 +762,10 @@ reviewer; when the sequencing was ours, say so.
 - Use only labels the reviewer has seen — their own numbering is ideal; ids that exist only in our
   notes are jargon to them.
 - Endpoints: an inline thread through
-  `POST repos/paranext/paranext-core/pulls/<pr>/comments/<root id>/replies` — it rejects a
+  `POST repos/<REPO>/pulls/<pr>/comments/<root id>/replies` — it rejects a
   reply-to-a-reply, and a reviewer's own comment *is* a reply whenever they answered inside a
   thread. A review body or a conversation comment has no thread; answer it with
-  `POST repos/paranext/paranext-core/issues/<pr>/comments`, quoting enough to anchor it. Off-PR
+  `POST repos/<REPO>/issues/<pr>/comments`, quoting enough to anchor it. Off-PR
   items become new threads per **Feedback that arrived off-PR**.
 - **Feedback that came in through Reviewable** (a discussion that exists only in a Reviewable
   review body, with no GitHub thread) is answered the same way: a regular PR conversation comment
@@ -688,7 +780,7 @@ does, and nothing else in this flow would notice. Per PR in the round **that we 
 0's owner column — someone else's description is never edited), compare what the round changed
 with what the description says. Where it now says something false, or leaves out behaviour the
 round added, fetch the **live** description —
-`gh pr view <pr> --json body --jq .body > .review/<dir>/pr-body-<pr>-live.md` — not a copy from
+`gh pr view <pr> --json body --jq .body > <notes>/pr-body-<pr>-live.md` — not a copy from
 memory or from an earlier round, since the user or a bot may have edited it since. Draft
 `pr-body-<pr>-new.md` from it: correct and extend, never rewrite from scratch, and keep every block
 that is not ours — the Reviewable block, anything the user wrote — byte-for-byte. The description
@@ -792,8 +884,8 @@ review threads die with the squash-merge; it is not committed silently after ste
    edit: stop, fold their change into the draft, and re-present it at 9. Otherwise:
 
    ```bash
-   gh pr edit <pr> --body-file .review/<dir>/pr-body-<pr>-new.md
-   gh pr view <pr> --json body --jq .body | diff - .review/<dir>/pr-body-<pr>-new.md
+   gh pr edit <pr> --body-file <notes>/pr-body-<pr>-new.md
+   gh pr view <pr> --json body --jq .body | diff - <notes>/pr-body-<pr>-new.md
    ```
 
    `gh pr edit --body-file` can exit 0 and change nothing, so the read-back diff is the result,
@@ -829,7 +921,7 @@ review threads die with the squash-merge; it is not committed silently after ste
    re-running step 1's query first so threads opened this round have one. Both outcomes go in
    `verification.md`.
 
-**Do not resolve the reviewer's threads.** `.context/standards/Code-Review-Guide.md` does allow an
+**Do not resolve the reviewer's threads.** paranext-core's `.context/standards/Code-Review-Guide.md` does allow an
 author to self-resolve items the reviewer marked *Discussing*; this flow declines that latitude on
 purpose. Resolving someone else's thread by mistake is public and awkward, and leaving one open
 costs nothing.
@@ -922,7 +1014,7 @@ the condition.
 
 A document or a DM answered in kind keeps the conversation off the PR, and the next reader of the
 code sees none of it. Convert it instead: at step 8, draft each off-PR item as a new review thread
-anchored on the code it is about — `POST repos/paranext/paranext-core/pulls/<pr>/comments` with
+anchored on the code it is about — `POST repos/<REPO>/pulls/<pr>/comments` with
 `commit_id`, `path` and `line`. They are presented at step 9 with the replies and posted at 10.4
 with them.
 

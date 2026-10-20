@@ -7,7 +7,7 @@ tag here with a `git-subdir` source.
 
 | Plugin | What it does |
 | --- | --- |
-| [`process-pr-feedback`](plugins/process-pr-feedback) | Works a reviewer's feedback round on paranext-core PRs end to end, with the user ruling at two hard stops |
+| [`process-pr-feedback`](plugins/process-pr-feedback) | Works a reviewer's feedback round on PRs in any paranext GitHub repo end to end, with the user ruling at two hard stops |
 
 ## Releasing
 
