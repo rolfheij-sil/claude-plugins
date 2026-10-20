@@ -1,0 +1,18 @@
+#!/bin/sh
+# Put this directory first on PATH to run paranext-core's refresh.sh without its `npm stop`, which
+# kills every Electron, dotnet and build process on the machine. Any other npm call goes to the
+# real npm, found by searching PATH with this directory left out. See ../app-guard.py.
+if [ "$1" = "stop" ]; then
+  echo "npm-no-stop: skipped 'npm stop' (app-guard said other sessions' processes would be killed)"
+  exit 0
+fi
+self_dir=$(cd "$(dirname "$0")" && pwd)
+IFS=:
+for dir in $PATH; do
+  [ "$dir" = "$self_dir" ] && continue
+  if [ -x "$dir/npm" ]; then
+    exec "$dir/npm" "$@"
+  fi
+done
+echo "npm-no-stop: no real npm found on PATH" >&2
+exit 127

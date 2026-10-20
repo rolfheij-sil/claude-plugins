@@ -1,0 +1,6 @@
+{
+  "name": "process-pr-feedback",
+  "description": "Work a reviewer's feedback round on paranext-core PRs end to end, with the user ruling at two hard stops",
+  "author": { "name": "Rolf Heij" },
+  "repository": "https://github.com/rolfheij-sil/claude-plugins"
+}
