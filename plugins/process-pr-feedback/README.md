@@ -19,8 +19,9 @@ suites, the e2e specs for the area, and a live run of each scenario in the dev a
 The scenarios come from the requirement — the file `--scenarios` names (a design, a plan, a
 ticket's text), or the branch's Jira ticket read through the Atlassian MCP server — never from the
 code, and the list is shown before the checks run. It ends with a table of the checks, each with its result or the reason it
-was not run, and changes nothing: no commits, no push, no comments. paranext-core's `pr-creator`
-skill runs it before opening a PR and puts the table in the PR body.
+was not run. It commits, pushes and posts nothing; it leaves a `papi.d.ts` the build changed for
+you to commit, and updates roborev's local records. paranext-core's `pr-creator` skill runs it
+before opening a PR, where the plugin is installed, and puts the table in the PR body.
 
 ## Install
 
@@ -45,6 +46,7 @@ In paranext-core the skill runs paranext-core's own checks, e2e and live app run
 uses that repo's own equivalents, read from its CI workflows, scripts and README. Extension repos
 still get the live run in the Platform.Bible dev app.
 
-Notes for each round go in `.review/<pr>-<date>/` inside the checkout. paranext-core already ignores
+Notes for each round go in `.review/<pr>-<date>/` (`.review/<branch>-<date>/` for `--verify-only`)
+inside the checkout. paranext-core already ignores
 that folder for git, prettier and eslint. In other repos the skill drops a `.gitignore` containing
 `*` into `.review/`, so git ignores the notes, and it leaves the folder out of its own format check.

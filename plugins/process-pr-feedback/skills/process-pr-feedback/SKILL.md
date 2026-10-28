@@ -32,7 +32,8 @@ neither gate, and pushes and posts nothing.
   then red-first tests.
 - **roborev** — optional. Where `command -v roborev` finds it and `roborev status` succeeds, the
   roborev parts of steps 1, 6, 7, 9 and `--scout-only` run as written. Otherwise skip every
-  roborev part and `roborev.md`, and say at gate 9, once, that roborev was not available.
+  roborev part and `roborev.md`, and say at gate 9 — or in `--verify-only`'s table — once, that
+  roborev was not available.
 - **The bundled `app-guard`** (step 7) reads `/proc`, so it runs on Linux and WSL only. Elsewhere,
   check the app's ports yourself (`lsof -i :8876 -i :1212 -i :9223 -i :9222`) and ask the user
   before anything that runs `npm stop`.
@@ -67,9 +68,9 @@ own equivalent, as each of those places says.
 
 Keep the round's notes in a directory named `<pr>[-<pr>…]-<YYYY-MM-DD>`, dated by the day the round
 started (a second round the same day gets `-2`), under a parent that keeps them out of the diff
-under review and out of step 7's format check. In `--verify-only` mode there is no PR number, so
-the directory is `<branch>-<YYYY-MM-DD>`, with the same `-2` rule, and a later session finds it
-with `ls -d .review/<branch>-20*`. This file calls that directory `<notes>`:
+under review and out of step 7's format check. This file calls that directory `<notes>`. (In
+`--verify-only` mode there is no PR number, so it is `<branch>-<YYYY-MM-DD>`, with the same `-2`
+rule and any `/` in the branch name written as `-`, found later with `ls -d .review/<branch>-20*`.)
 
 - **In paranext-core:** under `.review/`, which git, prettier and eslint already ignore. A later
   session finds the round with `ls -d .review/<pr>*`.
@@ -129,9 +130,10 @@ git status --porcelain              # tracked modifications
 **In `--verify-only` mode this step stops here, reduced to one row.** The REPO rule, the fetch and
 the two checkout stops below apply unchanged — `<branch>` is the only branch in the table, so HEAD
 must be on it, and the tree must be clean. There is no PR to walk, so the row is: `<branch>` · its
-base · `headRefOid` from `git rev-parse <branch>` · local-only and remote-only from
+base · `headRefOid` from `git rev-parse <branch>` · remote-only and local-only, in that order, from
 `git rev-list --left-right --count origin/<branch>...<branch>` where `origin/<branch>` exists,
-else "not pushed". The base is `--base <base>` when given — a branch stacked on an unmerged one
+else "not pushed". Local-only commits need no ruling here: the local tip is what is verified, and
+the table says it is ahead of `origin`. The base is `--base <base>` when given — a branch stacked on an unmerged one
 — and `main` otherwise, and it must exist on `origin`, since every range below is built on
 `origin/<base>`: a base that was never pushed is a stop, put to the user. It is what step 7's `origin/<baseRefName>` and "shown red on the base"
 mean, and the round's diff, wherever step 7 says "the round's diff" or "the area the round
@@ -691,7 +693,11 @@ uncapped. Run these one at a time, not as parallel tool calls.
 
 A red test is not "flaky" or "pre-existing" until shown to be: run the same test on the branch's base.
 Red there too means pre-existing — listed at gate 9 as such, neither fixed silently nor dismissed.
-Green there means this round broke it — back to step 5.
+Green there means this round broke it — back to step 5. Run it on the base without touching this
+checkout: a temporary worktree of `origin/<base>` with its dependencies installed — in paranext-core
+under `.claude/worktrees/`, the one place there Claude Code's own worktree tool writes without a
+prompt; in another repo, a sibling directory outside the checkout — removed afterwards; where that is too costly for one test, the
+row says "not shown on the base" rather than "pre-existing".
 
 **E2E for the area the round changed.** Find the specs that cover it (`git grep` under
 `e2e-tests/tests` for the feature's names) and run them per `.context/standards/Testing-Guide.md`
@@ -730,7 +736,8 @@ carry in their environment — and its verdict is its exit status:
   — the same script, with `npm stop` turned into a no-op. This is the normal start, every time.
 - **WAIT (4)** — a live peer session holds the ports or is running e2e. Never kill it: coordinate,
   actively. The report gives the session's name; find it with `ListAgents` and `SendMessage` it with
-  `notify_when_idle: true`, asking a question it can answer in one reply, first line self-contained:
+  `notify_when_idle: true`, asking a question it can answer in one reply, first line self-contained (in `--verify-only`
+  mode, name the branch where this says PR <n>):
   "PR <n> needs the dev app (ports 8876/1212/9223) for a live test of about <m> minutes, and you
   hold it (pid <p>). If you are done with it, stop it by pid — not `npm stop` — and reply
   'released'; if not, reply with roughly how long you still need it." Then:
@@ -771,24 +778,31 @@ back to and nothing is committed: a red check, a scenario that did not behave as
 fixing it is the caller's — who then runs the mode again, in full: the later-pass shortcut above
 rests on CI running the suites after the push, and nothing has been pushed yet. A changed
 `papi.d.ts` is left in the tree for the caller to commit (it belongs on the branch, which is why
-the row exists); it is the one tracked modification a re-run of the mode will find, and the
-caller commits it before that re-run rather than the mode committing it.
+the row exists); every row after the battery then describes `headRefOid` plus that file, and says
+so. It is the one tracked modification a re-run of the mode will find, and the caller commits it
+before that re-run rather than the mode committing it.
 
 **With roborev, leave this step with it settled:** for every branch of the round, step 6's coverage check
 prints no commit and its open-jobs query prints nothing — every commit has a review, none open, none
-still queued. Gate 9 presents that state; it does not weigh reviews. In `--verify-only` mode this
-holds too — a branch about to get a PR is exactly where an unsettled review matters — and it is
-the one part of step 6 the mode runs: its coverage check over `origin/<base>..<branch>` (there is
-no `headRefOid` column from an earlier tip; every commit of the branch is the round's, and
-`<worktree>` is the checkout the mode runs in), then its settling, with the four questions and
-`roborev.md` as written there. The mode fixes nothing, so "settled" here means: every commit has
-a review, none is queued or running, every `F` job has been read and each of its findings has a
-disposition in `roborev.md`. A finding that is not a defect, stale or a preference this repo does
-not hold is commented and closed as step 6 says — `roborev comment` and `roborev close` are local
-to roborev; nothing reaches GitHub. A real finding is commented ("open: in the verification table
-of <date>, for the caller") and **left open**, and is a row in the table the mode ends with; the
-caller fixes it, and the next run of the mode finds the fix commit reviewed and settles the job.
-Closing a real finding unfixed would lose it.
+still queued. Gate 9 presents that state; it does not weigh reviews.
+
+**In `--verify-only` mode** — a branch about to get a PR is exactly where an unsettled review
+matters — step 6's roborev part is the one piece of another step the mode runs: the coverage check
+over `origin/<base>..<branch>` (there is no `headRefOid` column from an earlier tip; every commit
+of the branch is the round's, and `<worktree>` is the checkout the mode runs in), then the
+settling with its four questions ("within what the user ruled" reads here as "within the
+requirement") and `roborev.md`. The mode fixes nothing and takes no ruling, so
+the state it leaves and the table shows is not the one above but this: every commit has a review,
+none is queued or running, every `F` job has been read, and each finding has a disposition in
+`roborev.md`. Step 6's second kind — not a defect, not worth fixing, already fixed, stale, or a
+preference this repo does not hold — is commented and closed as step 6 says (`roborev comment` and
+`roborev close` are local to roborev; nothing reaches GitHub), and the table lists those declines
+compactly, as gate 9 does, since the reader overrules there. Step 6's first and third kinds — a
+real defect, in scope or beyond, small or structural — are one kind here: commented ("open: in the
+verification table of <date>, for the caller") and **left open**, each a row in the table, and
+the headline is not "everything green" while one exists. The caller fixes it; the next run of the
+mode finds the fix commit reviewed and settles the job. Closing a real finding unfixed would lose
+it.
 
 ## 8. Draft replies
 
@@ -1070,8 +1084,8 @@ describes under **What gate 9 shows** — the checks, not a verdict — then sto
 the verification a feedback round gets happens *before* a PR is opened as well: a build flow
 verifies code against the tests it wrote and a reviewer's reading of the diff, and nothing in it
 checks the feature against its requirement in the running app. paranext-core's `pr-creator` skill
-runs this mode as its first step and puts the table in the PR body; a human can run it on any
-branch for the same reason. It is one entry point on this file, not a copy of step 7, so step 7
+runs this mode first, where the plugin is installed, and puts the table in the PR body; a human
+can run it on any branch for the same reason. It is one entry point on this file, not a copy of step 7, so step 7
 evolves once.
 
 **What runs, and what does not.** Step 0 reduced to the one-row form its text describes, which
@@ -1080,13 +1094,14 @@ written — the battery with the expected `papi.d.ts` delta stated before `build
 test suites capped, e2e for the area with the `--list` count, the live run per scenario with
 evidence, `app-guard` before the app, `verification.md` as the ledger of every command with its
 exit status and counts and of everything not run with the reason, a red test counting as
-pre-existing only once shown red on the base, and roborev settled in the sense step 7 gives that
-word for this mode (its part of step 6 is the one piece of another step the mode runs). Steps 1–5
-and 8–10 do not run: there is no feedback to read, nothing is implemented, nothing committed,
-nothing pushed, no reply drafted, no comment posted. What the mode leaves behind is the notes
-directory, named `<branch>-<YYYY-MM-DD>` as **Working notes** says, and whatever the battery's
-builds write — `buildInfo.json` is ignored by git; a changed `papi.d.ts` is a row and the
-caller's to commit, as step 7 says. `<branch>` is checked out in the current checkout with a
+pre-existing only once shown red on the base, and roborev in the state step 7 describes for
+this mode (its part of step 6 is the one piece of another step the mode runs). Steps 1–5 and 8–10
+do not run: there is no feedback to read, nothing is implemented, nothing committed, nothing
+pushed, no reply drafted, no comment posted. What the mode leaves behind: the notes directory,
+named `<branch>-<YYYY-MM-DD>` as **Working notes** says; whatever the battery's builds write —
+`buildInfo.json` is ignored by git; a changed `papi.d.ts` is a row and the caller's to commit, as
+step 7 says; and roborev's local records — reviews queued for commits it had not seen, comments,
+closed jobs. `<branch>` is checked out in the current checkout with a
 clean tree, or the mode stops: step 0's checkout stops apply.
 
 **Where the scenarios come from.** The normal flow takes its live-run scenarios from the
@@ -1099,11 +1114,10 @@ reviewer's items; this mode has none, so it takes them from the requirement:
   source is the ticket's acceptance-criteria field where the project has one, else the section of
   its description headed "Acceptance", "Acceptance criteria" or the like, else the description's
   list of what the feature must do. Where the server is not available, or the branch name carries
-  no key, or the ticket has none of those, ask the user for the requirement and **wait** — this is
-  the one place the mode waits, since a run with no requirement has nothing to verify against —
-  never guess one, and never fall back to the diff. (Step 7's own stops — `app-guard`'s WAIT and
-  ASK, the REPO rule — apply as written; this is the one question the mode itself puts.) Running
-  as a sub-agent with no line to the
+  no key, or the ticket has none of those, ask the user for the requirement and **wait**, since a run with
+  no requirement has nothing to verify against — never guess one, and never fall back to the
+  diff. (Step 7's own stops — `app-guard`'s WAIT and ASK — and step 0's REPO rule apply as written.)
+  Running as a sub-agent with no line to the
   user, return the question to the caller instead and stop; a caller that has the requirement
   passes it as `--scenarios <path>` on the next call.
 
@@ -1111,29 +1125,37 @@ reviewer's items; this mode has none, so it takes them from the requirement:
 what the branch does — "the button appears", because the diff adds a button — passes by
 construction and verifies nothing; a scenario written from what was asked — "a user with an
 editable project sees the Sync item enabled; one with a resource sees it disabled" — can fail.
-Each scenario records its source: the acceptance line or document sentence it comes from, quoted.
-A requirement with no scenario that step 7's live run can exercise (a refactor, a doc change) is
-said to have none, with the reason, and the live run is listed as not run for it.
+So write the list before reading the branch's diff: step 7's own reading of it (the `papi.d.ts`
+delta, the e2e specs for the area) comes after the list is written down. A plan given as
+`--scenarios` is read for what it says the feature must do, not for how it is built. Each
+scenario records its source: the acceptance line or document sentence it comes from, quoted. A
+refactor's requirement is that nothing changes, so its scenarios are the area's existing
+behaviour as the ticket states it, and the live run is still required (step 7: every change that
+reaches a runtime path). Only a change with no runtime path — docs, tests, comments — has no
+scenario, and the live run is listed as not run for it, with that reason.
 
 **Show the list before running step 7.** After step 0 and before step 7's first command, present
 the scenarios — numbered, each with its quoted source, what will be done and what is expected to
-be seen — in the message, and write the same into `findings.md`. This is so that a scenario nobody
-asked for cannot masquerade as verification: the reader sees what was tested against what. It is
-not a gate and the run does not wait: in a Claude Code turn the user cannot answer until the turn
-ends, so the list is shown, step 7 runs, and the table at the end repeats the list. A scenario the
-user then strikes is removed from the table and marked struck in `verification.md`, its evidence
-kept; one they add is run live on its own, with its
-evidence added — that re-run covers only the added scenarios, unlike the full re-run a fix
-requires. Running as a sub-agent, the list is part of the report returned to the caller, which
-shows it the same way.
+be seen — and write the same into `findings.md`. This is so that a scenario nobody asked for
+cannot masquerade as verification: the reader sees what was tested against what. With a user to
+answer, present it as one `AskUserQuestion` — run as listed, or change it — and wait; the answer
+goes into `rulings.md` verbatim, as step 4 does. Running as a sub-agent, in a routine, or anywhere
+no one can answer, show the list, run, and let the table at the end repeat it; a scenario struck
+afterwards stays in the table **marked struck**, with who struck it and why, its evidence kept —
+it is never removed, since a struck failure that vanished would be a table that lies; one added
+afterwards is run live on its own by the same session, once it has re-checked that `headRefOid`
+and the clean tree are unchanged, with its evidence added — that re-run covers only the added
+scenarios. Anything that moved the tip since the table — a fix, the `papi.d.ts` commit — makes it
+the full re-run instead, which is what a fresh invocation always is.
 
 **How it ends.** The table under **What gate 9 shows**, per row of step 0's table: each command
 with its exit status and its counts; the papi delta stated and observed; each e2e subset with its
 listed count; the live run per scenario with its evidence (a screenshot, the PAPI response, the
-log lines — "verified live" without evidence is not a row); roborev's state in one line, plus a
-row per real finding it left open; and everything not run, with the reason. Rows that failed are stated as found — the mode never fixes,
-and never softens a red row into a note. "Everything green" is the headline only when every row
-says so. Then stop. The caller — the `pr-creator` skill, or the user — decides what the table
+log lines — "verified live" without evidence is not a row); roborev's state in one line, its
+declines compactly, and a row per real finding it left open; and everything not run, with the
+reason. Rows that failed are stated as found — the mode never fixes, and never softens a red row
+into a note. "Everything green" is the headline only when every row says so and no roborev
+finding is open. Then stop. The caller — the `pr-creator` skill, or the user — decides what the table
 means.
 
 ## Feedback that arrived off-PR

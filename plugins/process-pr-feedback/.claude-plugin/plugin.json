@@ -1,6 +1,6 @@
 {
   "name": "process-pr-feedback",
-  "description": "Work a reviewer's feedback round on PRs in any paranext GitHub repo end to end, with the user ruling at two hard stops",
+  "description": "Work a reviewer's feedback round on PRs in any paranext GitHub repo end to end, with the user ruling at two hard stops; or verify a branch before its PR exists (--verify-only)",
   "author": {
     "name": "Rolf Heij"
   },
