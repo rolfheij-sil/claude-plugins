@@ -13,6 +13,15 @@ Nothing is pushed or posted before you approve at the second stop.
 
 `--scout-only` runs only as far as the first stop and changes nothing, so it is safe to schedule.
 
+`/process-pr-feedback --verify-only <branch> [--base <base>] [--scenarios <path>]` runs the
+verification step alone on a branch that has no PR yet: the build and lint battery, the whole test
+suites, the e2e specs for the area, and a live run of each scenario in the dev app with evidence.
+The scenarios come from the requirement — the file `--scenarios` names (a design, a plan, a
+ticket's text), or the branch's Jira ticket read through the Atlassian MCP server — never from the
+code, and the list is shown before the checks run. It ends with a table of the checks, each with its result or the reason it
+was not run, and changes nothing: no commits, no push, no comments. paranext-core's `pr-creator`
+skill runs it before opening a PR and puts the table in the PR body.
+
 ## Install
 
 From the Paratext team marketplace:
